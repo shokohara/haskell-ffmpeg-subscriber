@@ -1,6 +1,10 @@
-resolver: lts-8.19
+resolver: lts-8.20
 packages:
-- '.'
+- location: .
+- location:
+    git: git@github.com:shokohara/servant-pubsub-webhook.git
+    commit: 470d2d66ccf8d027a86061e469498b56a30d39cd
+  extra-dep: true
 extra-deps: []
 flags: {}
 extra-package-dbs: []
