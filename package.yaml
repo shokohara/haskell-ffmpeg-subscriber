@@ -35,9 +35,15 @@ dependencies:
   - either
   - http-client
   - transformers
+  - process
   - aeson
+  - text
+  - aeson-casing
   - wai
   - warp
   - transformers
   - wai-logger
+  - async
+  - here
+  - stm
 

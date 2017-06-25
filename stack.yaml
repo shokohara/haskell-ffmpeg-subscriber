@@ -3,7 +3,7 @@ packages:
 - location: .
 - location:
     git: git@github.com:shokohara/servant-pubsub-webhook.git
-    commit: 470d2d66ccf8d027a86061e469498b56a30d39cd
+    commit: 967cff2cdaeb99a4c97328bbfa54753d8a9c814e
   extra-dep: true
 extra-deps: []
 flags: {}
