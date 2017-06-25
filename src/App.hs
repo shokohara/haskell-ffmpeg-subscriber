@@ -7,29 +7,34 @@
 
 module App where
 
-import qualified Option as O
-import Option (Option)
-import     Control.Monad
-import Data.Either.Combinators
-import           Control.Monad.Trans.Class    (lift)
-import Control.Monad.IO.Class (liftIO)
-import           Data.Aeson
-import Data.String.Here
-import           GHC.Generics
-import           Network.Wai
-import Servant.Client
-import           Network.Wai.Handler.Warp
-import           Servant
-import           System.IO
-import System.Process
-import Network.HTTP.Client hiding (Proxy)
-import           Network.Wai.Logger       (withStdoutLogger)
+import Control.Concurrent.Async
+import Control.Concurrent.STM.TVar
 import Control.Exception hiding (Handler)
-import GHC.Generics
-import Data.Text (Text)
+import Control.Monad
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader
+import Control.Monad.STM
+import Control.Monad.Trans.Class    (lift)
 import Data.Aeson
 import Data.Aeson.Casing
-import Control.Concurrent.Async
+import Data.Either.Combinators
+import Data.String.Here
+import Data.Text (Text)
+import GHC.Generics
+import GHC.Generics
+import Network.HTTP.Client hiding (Proxy)
+import Network.Wai
+import Network.Wai.Handler.Warp
+import Network.Wai.Logger       (withStdoutLogger)
+import Option (Option)
+import Prelude hiding (lookup)
+import STMContainers.Map
+import Data.Map (fromList)
+import Servant
+import Servant.Client
+import System.IO
+import System.Process
+import qualified Option as O
 
 data Message = Message { messageAttributes :: Object, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
@@ -75,6 +80,25 @@ test a = do
   r1 <- wait a1
   print r1
 
+askTest :: Map Integer v -> STM (Maybe v)
+askTest = STMContainers.Map.lookup $ toInteger 1
+
+--ask3 = do
+--  a <- ask
+--  askTest a
+--ask2 :: Map Integer Integer
+--ask2 = fromList $ [(toInteger 1, toInteger 1)]
+
+--handler :: TVar (Map k a) -> PubSubRequest -> STM ()
+--handler s r = do
+--  currentValue <- readTVar s
+--  writeTVar s $ (Map 1 1)
+
+--test2 :: String -> Map Integer (IO ())
+--test2 a = do
+--  state <- ask
+--  state
+
 appMain4 :: PubSubRequest -> IO ()
 appMain4 a = do
 --  result <- try' $ createProcess (proc "sh" ["-c", "sleep 1; touch abc"])
@@ -95,8 +119,8 @@ server = app3 :<|> app4
 mkApp :: IO Application
 mkApp = return $ serve serverApi server
 
-run :: TVar [IO ()] -> Option -> IO ()
-run s o = withStdoutLogger $ \apilogger -> do
+run :: Option -> IO ()
+run o = withStdoutLogger $ \apilogger -> do
   let settings =
         setPort (O.port o) $
           setBeforeMainLoop (hPutStrLn stderr ("listening on port " ++ show (O.port o))) $
