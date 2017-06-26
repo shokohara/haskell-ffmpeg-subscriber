@@ -42,6 +42,7 @@ data State = State {
                    } deriving Show
 newtype StateVar = StateVar (MVar State)
 
+data Configg = Configg { myState :: TVar (Int, Int) }
 data Message = Message { messageAttributes :: Object, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
 
@@ -70,76 +71,31 @@ serverApi = Proxy
 getAllBooks :: ClientM (Maybe Val)
 getAllBooks = client clientApi
 
-appMain3 :: String -> IO (Either ServantErr (Maybe Val))
-appMain3 a = do
+--calculateContentLen :: Reader String Int
+--calculateContentLen = do
+--  content <- ask
+--  return $ length content
+
+apiApi :: String -> IO (Either ServantErr (Maybe Val))
+apiApi a = do
   manager <- liftIO $ newManager defaultManagerSettings
   mapBoth (const err500) id <$> runClientM getAllBooks (ClientEnv manager (BaseUrl Http a 80 ""))
 
---try' :: IO a ->  IO (Either IOException a)
---try' =  try
+apiHandler :: String -> Handler (Maybe Val)
+apiHandler a = lift $ join . rightToMaybe <$> apiApi a
 
---get2nd (_,b,_,_)=b
-
---test :: String -> IO ()
---test a = do
---  a1 <- async (get2nd <$> createProcess (proc "sh" ["-c", [here|"sleep 100; touch $a"|]]))
---  r1 <- wait a1
---  print r1
---
---askTest :: Map Integer v -> STM (Maybe v)
---askTest = STMContainers.Map.lookup $ toInteger 1
-
---ask4 = do
---  a <- ask
-
-calculateContentLen :: Reader String Int
-calculateContentLen = do
-  content <- ask
-  return $ length content
---ask3 = do
---  a <- ask
---  askTest a
---ask2 :: Map Integer Integer
---ask2 = fromList $ [(toInteger 1, toInteger 1)]
-
---handler :: TVar (Map k a) -> PubSubRequest -> STM ()
---handler s r = do
---  currentValue <- readTVar s
---  writeTVar s $ (Map 1 1)
-
-data Configg = Configg { myState :: TVar (Int, Int) }
-
---test2 :: String -> Map Integer (IO ())
---test2 a = do
---  state <- ask
---  state
--- :: TVar (Int, Int)
---abc = do
---  Configg { myState = state } <- ask
---  atomically $ do
---    currentValue <- readTVar state
---    writeTVar state currentValue
---  return ()
-
-appMain4 :: (MVar State) -> PubSubRequest -> IO ()
-appMain4 s a = do
+rootApi :: (MVar State) -> PubSubRequest -> IO ()
+rootApi s a = do
   m <- takeMVar s
   print m
---  result <- try' $ createProcess (proc "sh" ["-c", "sleep 1; touch abc"])
- -- (_, Just parted, _, _) <- createProcess (proc "sh" ["-c", "sleep 100; touch abc"])
- -- a <- hGetContents parted
- -- x <- print a
---  return x
+  putMVar s $ State []
   return ()
 
-app3 :: String -> Handler (Maybe Val)
-app3 a = lift $ join . rightToMaybe <$> appMain3 a
-
-app4 :: (MVar State) -> PubSubRequest -> Handler ()
-app4 s a = lift $ appMain4 s a
+rootHandler :: (MVar State) -> PubSubRequest -> Handler ()
+rootHandler s a = lift $ rootApi s a
 
 server :: (MVar State) -> Server ServerApi
-server s = app3 :<|> app4 s
+server s = apiHandler :<|> rootHandler s
 
 mkApp :: (MVar State) -> IO Application
 mkApp s = return $ serve serverApi (server s)
