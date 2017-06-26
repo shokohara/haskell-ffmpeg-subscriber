@@ -5,16 +5,13 @@ import App
 import Options.Applicative
 import Data.Semigroup ((<>))
 import Option
-import Control.Concurrent.STM.TVar
-import Control.Monad.STM
-import STMContainers.Map
 import Control.Concurrent.MVar
 
 portOpt :: Parser Int
 portOpt = option auto (long "port" <> help "Int")
 
 dirOpt :: Parser String
-dirOpt = option auto (long "dir" <> help "String")
+dirOpt = strOption (long "dir" <> help "String")
 
 sample :: Parser Option
 sample = Option <$> portOpt <*> dirOpt

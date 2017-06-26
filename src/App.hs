@@ -3,15 +3,14 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module App where
 
 import System.Exit
-import Control.Concurrent.Async
 import Control.Exception hiding (Handler)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader
 import Control.Monad.Trans.Class    (lift)
 import Data.Aeson
 import Data.Aeson.Casing
@@ -33,21 +32,29 @@ import System.IO
 import System.Process
 import qualified Option as O
 import Control.Concurrent.MVar
+import Data.String
 
+-- Mapになるだろう
+-- ffmpegが完了したら完了とみなされてしまう（GCPにアップロードする必要があるのに
 newtype State = State {
   values :: [(Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)]
                    }
 newtype StateVar = StateVar (MVar State)
 
-data Message = Message { messageAttributes :: Object, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
+data Attributes = Attributes { attributesVersion :: String, attributesKey :: String, attributesUrl :: String } deriving (Show, Eq, Generic)
+data Message = Message { messageAttributes :: Attributes, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
 
+instance ToJSON Attributes where
+  toJSON = genericToJSON $ aesonPrefix snakeCase
 instance ToJSON Message where
   toJSON = genericToJSON $ aesonPrefix snakeCase
-instance FromJSON Message where
-  parseJSON = genericParseJSON $ aesonPrefix snakeCase
 instance ToJSON PubSubRequest where
   toJSON = genericToJSON $ aesonPrefix snakeCase
+instance FromJSON Attributes where
+  parseJSON = genericParseJSON $ aesonPrefix snakeCase
+instance FromJSON Message where
+  parseJSON = genericParseJSON $ aesonPrefix snakeCase
 instance FromJSON PubSubRequest where
   parseJSON = genericParseJSON $ aesonPrefix snakeCase
 
@@ -67,11 +74,6 @@ serverApi = Proxy
 getAllBooks :: ClientM (Maybe Val)
 getAllBooks = client clientApi
 
---calculateContentLen :: Reader String Int
---calculateContentLen = do
---  content <- ask
---  return $ length content
-
 apiApi :: String -> IO (Either ServantErr (Maybe Val))
 apiApi a = do
   manager <- liftIO $ newManager defaultManagerSettings
@@ -80,7 +82,7 @@ apiApi a = do
 statusApi :: MVar State -> IO [Val]
 statusApi s = do
   m <- readMVar s
-  (\n -> [Val "localhost" n]) . length . filter isNothing <$> (sequence $ getExitCode <$> values m)
+  (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
 
 apiHandler :: MVar State -> Handler [Val]
 apiHandler s = lift $ statusApi s
@@ -100,13 +102,32 @@ getStdOut = hGetContents . fromJust . get2
 getExitCode :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO (Maybe ExitCode)
 getExitCode = getProcessExitCode . get4
 
+mkdirCommand :: Option -> PubSubRequest -> (String, [String])
+mkdirCommand o r =
+  let dirPath = O.dir o
+      key = attributesKey . messageAttributes . psrMessage $ r
+      url = attributesUrl . messageAttributes . psrMessage $ r
+  in ("mkdir", ["-p", [i|${dirPath}/${key}|]])
+
+ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
+ffmpegCommand o r =
+  let dirPath = O.dir o
+      key = attributesKey . messageAttributes . psrMessage $ r
+      url = attributesUrl . messageAttributes . psrMessage $ r
+   --in ("ffmpeg", [url, key])
+  in ("touch", [[i|${dirPath}/${key}/${key}.m3u8|]])
+
+-- 処理不可能な引数で落ちる
 payloadApi :: Option -> MVar State -> PubSubRequest -> IO ()
 payloadApi o s a = do
   m <- takeMVar s
   print . length $ values m
-  (sequence $ getExitCode <$> values m) >>= print
+  sequence (getExitCode <$> values m) >>= print
   x <- createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
-  putMVar s $ State $ values m ++ [x]
+  (_,_,_,z) <- createProcess (uncurry proc (mkdirCommand o a))
+  _ <- waitForProcess z
+  y <- createProcess (uncurry proc (ffmpegCommand o a))
+  putMVar s $ State $ values m ++ [x, y]
   return ()
 
 payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
