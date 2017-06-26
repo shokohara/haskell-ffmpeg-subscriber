@@ -109,6 +109,7 @@ mkdirCommand o r =
       url = attributesUrl . messageAttributes . psrMessage $ r
   in ("mkdir", ["-p", [i|${dirPath}/${key}|]])
 
+-- ffmpeg -i movieurl -acodec copy -vcodec copy -f segment -segment_time 5 -segment_list playlist.m3u8 %d.ts
 ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand o r =
   let dirPath = O.dir o
