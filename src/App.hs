@@ -35,6 +35,12 @@ import Servant.Client
 import System.IO
 import System.Process
 import qualified Option as O
+import Control.Concurrent.MVar
+
+data State = State {
+  values :: [Int]
+                   } deriving Show
+newtype StateVar = StateVar (MVar State)
 
 data Message = Message { messageAttributes :: Object, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
@@ -69,19 +75,19 @@ appMain3 a = do
   manager <- liftIO $ newManager defaultManagerSettings
   mapBoth (const err500) id <$> runClientM getAllBooks (ClientEnv manager (BaseUrl Http a 80 ""))
 
-try' :: IO a ->  IO (Either IOException a)
-try' =  try
+--try' :: IO a ->  IO (Either IOException a)
+--try' =  try
 
-get2nd (_,b,_,_)=b
+--get2nd (_,b,_,_)=b
 
-test :: String -> IO ()
-test a = do
-  a1 <- async (get2nd <$> createProcess (proc "sh" ["-c", [here|"sleep 100; touch $a"|]]))
-  r1 <- wait a1
-  print r1
-
-askTest :: Map Integer v -> STM (Maybe v)
-askTest = STMContainers.Map.lookup $ toInteger 1
+--test :: String -> IO ()
+--test a = do
+--  a1 <- async (get2nd <$> createProcess (proc "sh" ["-c", [here|"sleep 100; touch $a"|]]))
+--  r1 <- wait a1
+--  print r1
+--
+--askTest :: Map Integer v -> STM (Maybe v)
+--askTest = STMContainers.Map.lookup $ toInteger 1
 
 --ask4 = do
 --  a <- ask
@@ -115,31 +121,34 @@ data Configg = Configg { myState :: TVar (Int, Int) }
 --    writeTVar state currentValue
 --  return ()
 
-appMain4 :: PubSubRequest -> IO ()
-appMain4 a = do
+appMain4 :: (MVar State) -> PubSubRequest -> IO ()
+appMain4 s a = do
+  m <- takeMVar s
+  print m
 --  result <- try' $ createProcess (proc "sh" ["-c", "sleep 1; touch abc"])
-  (_, Just parted, _, _) <- createProcess (proc "sh" ["-c", "sleep 100; touch abc"])
-  a <- hGetContents parted
-  x <- print a
-  return x
+ -- (_, Just parted, _, _) <- createProcess (proc "sh" ["-c", "sleep 100; touch abc"])
+ -- a <- hGetContents parted
+ -- x <- print a
+--  return x
+  return ()
 
 app3 :: String -> Handler (Maybe Val)
 app3 a = lift $ join . rightToMaybe <$> appMain3 a
 
-app4 :: PubSubRequest -> Handler ()
-app4 a = lift $ appMain4 a
+app4 :: (MVar State) -> PubSubRequest -> Handler ()
+app4 s a = lift $ appMain4 s a
 
-server :: Server ServerApi
-server = app3 :<|> app4
+server :: (MVar State) -> Server ServerApi
+server s = app3 :<|> app4 s
 
-mkApp :: IO Application
-mkApp = return $ serve serverApi server
+mkApp :: (MVar State) -> IO Application
+mkApp s = return $ serve serverApi (server s)
 
-run :: Option -> IO ()
-run o = withStdoutLogger $ \apilogger -> do
+run :: (MVar State) -> Option -> IO ()
+run s o = withStdoutLogger $ \apilogger -> do
   let settings =
         setPort (O.port o) $
           setBeforeMainLoop (hPutStrLn stderr ("listening on port " ++ show (O.port o))) $
             setLogger apilogger defaultSettings
-  runSettings settings =<< mkApp
+  runSettings settings =<< mkApp s
 
