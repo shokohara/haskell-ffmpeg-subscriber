@@ -3,18 +3,15 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module App where
 
 import System.Exit
 import Control.Concurrent.Async
-import Control.Concurrent.STM.TVar
 import Control.Exception hiding (Handler)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader
-import Control.Monad.STM
 import Control.Monad.Trans.Class    (lift)
 import Data.Aeson
 import Data.Aeson.Casing
@@ -23,14 +20,12 @@ import Data.String.Here
 import Data.Maybe
 import Data.Text (Text)
 import GHC.Generics
-import GHC.Generics
 import Network.HTTP.Client hiding (Proxy)
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Logger       (withStdoutLogger)
 import Option (Option)
 import Prelude hiding (lookup)
-import STMContainers.Map
 import Data.Map (fromList)
 import Servant
 import Servant.Client
@@ -39,12 +34,11 @@ import System.Process
 import qualified Option as O
 import Control.Concurrent.MVar
 
-data State = State {
+newtype State = State {
   values :: [(Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)]
                    }
 newtype StateVar = StateVar (MVar State)
 
-data Configg = Configg { myState :: TVar (Int, Int) }
 data Message = Message { messageAttributes :: Object, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
 
@@ -83,18 +77,21 @@ apiApi a = do
   manager <- liftIO $ newManager defaultManagerSettings
   mapBoth (const err500) id <$> runClientM getAllBooks (ClientEnv manager (BaseUrl Http a 80 ""))
 
-statusApi :: (MVar State) -> IO [Val]
+statusApi :: MVar State -> IO [Val]
 statusApi s = do
   m <- readMVar s
-  (\n -> [Val "localhost" n]) <$> length . filter isNothing <$> (sequence $ getExitCode <$> values m)
+  (\n -> [Val "localhost" n]) . length . filter isNothing <$> (sequence $ getExitCode <$> values m)
 
-apiHandler :: (MVar State) -> Handler [Val]
+apiHandler :: MVar State -> Handler [Val]
 apiHandler s = lift $ statusApi s
 
 try' :: IO a -> IO (Either IOException a)
 try' = try
 
+get4 :: (t2, t1, t, t3) -> t3
 get4 (_, _, _, x) = x
+
+get2 :: (t2, t3, t1, t) -> t3
 get2 (_, x, _, _) = x
 
 getStdOut :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO String
@@ -103,7 +100,7 @@ getStdOut = hGetContents . fromJust . get2
 getExitCode :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO (Maybe ExitCode)
 getExitCode = getProcessExitCode . get4
 
-payloadApi :: Option -> (MVar State) -> PubSubRequest -> IO ()
+payloadApi :: Option -> MVar State -> PubSubRequest -> IO ()
 payloadApi o s a = do
   m <- takeMVar s
   print . length $ values m
@@ -112,16 +109,16 @@ payloadApi o s a = do
   putMVar s $ State $ values m ++ [x]
   return ()
 
-payloadHandler :: Option -> (MVar State) -> PubSubRequest -> Handler ()
+payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
 payloadHandler o s a = lift $ payloadApi o s a
 
-server :: Option -> (MVar State) -> Server ServerApi
+server :: Option -> MVar State -> Server ServerApi
 server o s = apiHandler s :<|> payloadHandler o s
 
-mkApp :: Option -> (MVar State) -> IO Application
+mkApp :: Option -> MVar State -> IO Application
 mkApp o s = return $ serve serverApi (server o s)
 
-run :: (MVar State) -> Option -> IO ()
+run :: MVar State -> Option -> IO ()
 run s o = withStdoutLogger $ \apilogger -> do
   let settings =
         setPort (O.port o) $
