@@ -10,14 +10,14 @@ import Control.Monad.STM
 import STMContainers.Map
 import Control.Concurrent.MVar
 
-gbOpt :: Parser Int
-gbOpt = option auto (long "port" <> help "Int")
+portOpt :: Parser Int
+portOpt = option auto (long "port" <> help "Int")
 
-percentOpt :: Parser Float
-percentOpt = option auto (long "percent" <> help "Float")
+dirOpt :: Parser String
+dirOpt = option auto (long "dir" <> help "String")
 
 sample :: Parser Option
-sample = Option <$> gbOpt
+sample = Option <$> portOpt <*> dirOpt
 
 opts :: ParserInfo Option
 opts = info (sample <**> helper) ( fullDesc
@@ -31,7 +31,7 @@ opts = info (sample <**> helper) ( fullDesc
 main :: IO ()
 main = do
   --state <- atomically $ (new :: STM (Map Integer Integer))
-  mvar <- newMVar (State [0])
+  mvar <- newMVar (State [])
 --  state <- atomically $ newTVar (0, 0)
 --  let config = Configg { myState = state }
   execParser opts >>= App.run mvar

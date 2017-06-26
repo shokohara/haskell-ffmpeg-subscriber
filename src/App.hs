@@ -7,6 +7,7 @@
 
 module App where
 
+import System.Exit
 import Control.Concurrent.Async
 import Control.Concurrent.STM.TVar
 import Control.Exception hiding (Handler)
@@ -19,6 +20,7 @@ import Data.Aeson
 import Data.Aeson.Casing
 import Data.Either.Combinators
 import Data.String.Here
+import Data.Maybe
 import Data.Text (Text)
 import GHC.Generics
 import GHC.Generics
@@ -38,8 +40,8 @@ import qualified Option as O
 import Control.Concurrent.MVar
 
 data State = State {
-  values :: [Int]
-                   } deriving Show
+  values :: [(Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)]
+                   }
 newtype StateVar = StateVar (MVar State)
 
 data Configg = Configg { myState :: TVar (Int, Int) }
@@ -59,8 +61,8 @@ data Val = Val { name :: String, value :: Int } deriving (Show, Generic, FromJSO
 
 type ClientApi = "api" :> Get '[JSON] (Maybe Val)
 
-type ServerApi = "api" :> Capture "ip" String :> Get '[JSON] (Maybe Val)
-  :<|> "root" :> ReqBody '[JSON] PubSubRequest :> Post '[JSON] ()
+type ServerApi = "status" :> Get '[JSON] [Val]
+  :<|> "payload" :> ReqBody '[JSON] PubSubRequest :> Post '[JSON] ()
 
 clientApi :: Proxy ClientApi
 clientApi = Proxy
@@ -81,24 +83,43 @@ apiApi a = do
   manager <- liftIO $ newManager defaultManagerSettings
   mapBoth (const err500) id <$> runClientM getAllBooks (ClientEnv manager (BaseUrl Http a 80 ""))
 
-apiHandler :: String -> Handler (Maybe Val)
-apiHandler a = lift $ join . rightToMaybe <$> apiApi a
+statusApi :: (MVar State) -> IO [Val]
+statusApi s = do
+  m <- readMVar s
+  (\n -> [Val "localhost" n]) <$> length . filter isNothing <$> (sequence $ getExitCode <$> values m)
 
-rootApi :: (MVar State) -> PubSubRequest -> IO ()
-rootApi s a = do
+apiHandler :: (MVar State) -> Handler [Val]
+apiHandler s = lift $ statusApi s
+
+try' :: IO a -> IO (Either IOException a)
+try' = try
+
+get4 (_, _, _, x) = x
+get2 (_, x, _, _) = x
+
+getStdOut :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO String
+getStdOut = hGetContents . fromJust . get2
+
+getExitCode :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO (Maybe ExitCode)
+getExitCode = getProcessExitCode . get4
+
+payloadApi :: Option -> (MVar State) -> PubSubRequest -> IO ()
+payloadApi o s a = do
   m <- takeMVar s
-  print m
-  putMVar s $ State []
+  print . length $ values m
+  (sequence $ getExitCode <$> values m) >>= print
+  x <- createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
+  putMVar s $ State $ values m ++ [x]
   return ()
 
-rootHandler :: (MVar State) -> PubSubRequest -> Handler ()
-rootHandler s a = lift $ rootApi s a
+payloadHandler :: Option -> (MVar State) -> PubSubRequest -> Handler ()
+payloadHandler o s a = lift $ payloadApi o s a
 
-server :: (MVar State) -> Server ServerApi
-server s = apiHandler :<|> rootHandler s
+server :: Option -> (MVar State) -> Server ServerApi
+server o s = apiHandler s :<|> payloadHandler o s
 
-mkApp :: (MVar State) -> IO Application
-mkApp s = return $ serve serverApi (server s)
+mkApp :: Option -> (MVar State) -> IO Application
+mkApp o s = return $ serve serverApi (server o s)
 
 run :: (MVar State) -> Option -> IO ()
 run s o = withStdoutLogger $ \apilogger -> do
@@ -106,5 +127,5 @@ run s o = withStdoutLogger $ \apilogger -> do
         setPort (O.port o) $
           setBeforeMainLoop (hPutStrLn stderr ("listening on port " ++ show (O.port o))) $
             setLogger apilogger defaultSettings
-  runSettings settings =<< mkApp s
+  runSettings settings =<< mkApp o s
 
