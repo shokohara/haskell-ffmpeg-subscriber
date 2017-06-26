@@ -25,6 +25,8 @@ opts = info (sample <**> helper) ( fullDesc
 
 main :: IO ()
 main = do
-  state <- atomically $ (new :: STM (Map Integer Integer))
+  --state <- atomically $ (new :: STM (Map Integer Integer))
+  state <- atomically $ newTVar (0, 0)
+  let config = Configg { myState = state }
   execParser opts >>= App.run
 

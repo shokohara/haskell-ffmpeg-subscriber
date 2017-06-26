@@ -83,6 +83,13 @@ test a = do
 askTest :: Map Integer v -> STM (Maybe v)
 askTest = STMContainers.Map.lookup $ toInteger 1
 
+--ask4 = do
+--  a <- ask
+
+calculateContentLen :: Reader String Int
+calculateContentLen = do
+  content <- ask
+  return $ length content
 --ask3 = do
 --  a <- ask
 --  askTest a
@@ -94,10 +101,19 @@ askTest = STMContainers.Map.lookup $ toInteger 1
 --  currentValue <- readTVar s
 --  writeTVar s $ (Map 1 1)
 
+data Configg = Configg { myState :: TVar (Int, Int) }
+
 --test2 :: String -> Map Integer (IO ())
 --test2 a = do
 --  state <- ask
 --  state
+-- :: TVar (Int, Int)
+--abc = do
+--  Configg { myState = state } <- ask
+--  atomically $ do
+--    currentValue <- readTVar state
+--    writeTVar state currentValue
+--  return ()
 
 appMain4 :: PubSubRequest -> IO ()
 appMain4 a = do

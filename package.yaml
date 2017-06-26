@@ -49,4 +49,5 @@ dependencies:
   - stm
   - mtl
   - stm-containers
+  - classy-prelude
 
