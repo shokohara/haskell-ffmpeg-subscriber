@@ -38,7 +38,7 @@ import Data.String
 -- Mapになるだろう
 -- ffmpegが完了したら完了とみなされてしまう（GCPにアップロードする必要があるのに
 newtype State = State {
-  values :: [(Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)]
+  values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)]
                    }
 newtype StateVar = StateVar (MVar State)
 
@@ -62,8 +62,8 @@ get2 (_, x, _, _) = x
 getStdOut :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO String
 getStdOut = hGetContents . fromJust . get2
 
-getExitCode :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO (Maybe ExitCode)
-getExitCode = getProcessExitCode . get4
+getExitCode :: ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO (Maybe ExitCode)
+getExitCode = getProcessExitCode . get4 . fst
 
 mkdirCommand :: Option -> PubSubRequest -> (String, [String])
 mkdirCommand o r =
@@ -97,10 +97,9 @@ server o s = statusHandler s :<|> payloadHandler o s where
     m <- takeMVar s
     print . length $ values m
     sequence (getExitCode <$> values m) >>= print
-    x <- createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
-    (_,_,_,z) <- createProcess (uncurry proc (mkdirCommand o a))
-    _ <- waitForProcess z
-    y <- createProcess (uncurry proc (ffmpegCommand o a))
+    x <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
+    _ <- createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4
+    y <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand o a))
     putMVar s $ State $ values m ++ [x, y]
     return ()
 
