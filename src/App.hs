@@ -7,6 +7,7 @@
 
 module App where
 
+import Api
 import System.Exit
 import Control.Exception hiding (Handler)
 import Control.Monad
@@ -41,51 +42,13 @@ newtype State = State {
                    }
 newtype StateVar = StateVar (MVar State)
 
-data Attributes = Attributes { attributesVersion :: String, attributesKey :: String, attributesUrl :: String } deriving (Show, Eq, Generic)
-data Message = Message { messageAttributes :: Attributes, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
-data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
+getAllIps :: ClientM (Maybe Val)
+getAllIps = client clientApi
 
-instance ToJSON Attributes where
-  toJSON = genericToJSON $ aesonPrefix snakeCase
-instance ToJSON Message where
-  toJSON = genericToJSON $ aesonPrefix snakeCase
-instance ToJSON PubSubRequest where
-  toJSON = genericToJSON $ aesonPrefix snakeCase
-instance FromJSON Attributes where
-  parseJSON = genericParseJSON $ aesonPrefix snakeCase
-instance FromJSON Message where
-  parseJSON = genericParseJSON $ aesonPrefix snakeCase
-instance FromJSON PubSubRequest where
-  parseJSON = genericParseJSON $ aesonPrefix snakeCase
-
-data Val = Val { name :: String, value :: Int } deriving (Show, Generic, FromJSON, ToJSON)
-
-type ClientApi = "api" :> Get '[JSON] (Maybe Val)
-
-type ServerApi = "status" :> Get '[JSON] [Val]
-  :<|> "payload" :> ReqBody '[JSON] PubSubRequest :> Post '[JSON] ()
-
-clientApi :: Proxy ClientApi
-clientApi = Proxy
-
-serverApi :: Proxy ServerApi
-serverApi = Proxy
-
-getAllBooks :: ClientM (Maybe Val)
-getAllBooks = client clientApi
-
-apiApi :: String -> IO (Either ServantErr (Maybe Val))
-apiApi a = do
+traceIp :: String -> IO (Either ServantErr (Maybe Val))
+traceIp a = do
   manager <- liftIO $ newManager defaultManagerSettings
-  mapBoth (const err500) id <$> runClientM getAllBooks (ClientEnv manager (BaseUrl Http a 80 ""))
-
-statusApi :: MVar State -> IO [Val]
-statusApi s = do
-  m <- readMVar s
-  (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
-
-apiHandler :: MVar State -> Handler [Val]
-apiHandler s = lift $ statusApi s
+  mapBoth (const err500) id <$> runClientM getAllIps (ClientEnv manager (BaseUrl Http a 80 ""))
 
 try' :: IO a -> IO (Either IOException a)
 try' = try
@@ -118,27 +81,31 @@ ffmpegCommand o r =
    --in ("ffmpeg", [url, key])
   in ("touch", [[i|${dirPath}/${key}/${key}.m3u8|]])
 
--- 処理不可能な引数で落ちる
-payloadApi :: Option -> MVar State -> PubSubRequest -> IO ()
-payloadApi o s a = do
-  m <- takeMVar s
-  print . length $ values m
-  sequence (getExitCode <$> values m) >>= print
-  x <- createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
-  (_,_,_,z) <- createProcess (uncurry proc (mkdirCommand o a))
-  _ <- waitForProcess z
-  y <- createProcess (uncurry proc (ffmpegCommand o a))
-  putMVar s $ State $ values m ++ [x, y]
-  return ()
-
-payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
-payloadHandler o s a = lift $ payloadApi o s a
-
-server :: Option -> MVar State -> Server ServerApi
-server o s = apiHandler s :<|> payloadHandler o s
+server :: Option -> MVar State -> Server Api
+server o s = statusHandler s :<|> payloadHandler o s where
+  statusHandler :: MVar State -> Handler [Val]
+  statusHandler s = lift $ status s
+  payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
+  payloadHandler o s a = lift $ payload o s a
+  status :: MVar State -> IO [Val]
+  status s = do
+    m <- readMVar s
+    (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
+  -- 処理不可能な引数で落ちる
+  payload :: Option -> MVar State -> PubSubRequest -> IO ()
+  payload o s a = do
+    m <- takeMVar s
+    print . length $ values m
+    sequence (getExitCode <$> values m) >>= print
+    x <- createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
+    (_,_,_,z) <- createProcess (uncurry proc (mkdirCommand o a))
+    _ <- waitForProcess z
+    y <- createProcess (uncurry proc (ffmpegCommand o a))
+    putMVar s $ State $ values m ++ [x, y]
+    return ()
 
 mkApp :: Option -> MVar State -> IO Application
-mkApp o s = return $ serve serverApi (server o s)
+mkApp o s = return $ serve api (server o s)
 
 run :: MVar State -> Option -> IO ()
 run s o = withStdoutLogger $ \apilogger -> do
