@@ -7,6 +7,8 @@
 
 module App where
 
+import Debug.Trace
+import Control.Monad.Trans.Except
 import System.Directory
 import Control.Monad.Trans.Resource (liftResourceT, runResourceT)
 import Api
@@ -15,7 +17,7 @@ import System.Exit
 import Control.Exception hiding (Handler)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class    (lift)
+import Control.Monad.Trans.Class (lift)
 import Data.Aeson
 import Data.Aeson.Casing
 import Data.Either.Combinators
@@ -102,14 +104,14 @@ listFile o r =
       key = attributesKey . messageAttributes . psrMessage $ r
       url = attributesUrl . messageAttributes . psrMessage $ r
    --in ("ffmpeg", [url, key])
-  in getDirectoryContents [i|${dirPath}/${key}|]
+  in getDirectoryContents (traceShow (show $ dirPath ++ key) [i|${dirPath}/${key}|])
 
 server :: Option -> IORef State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
-  statusHandler :: IORef  State -> Handler [Val]
-  statusHandler s = lift $ status s
+  statusHandler :: IORef State -> Handler [Val]
+  statusHandler a = liftIO $ status a
   payloadHandler :: Option -> IORef State -> PubSubRequest -> Handler ()
-  payloadHandler o s a = lift $ payload a
+  payloadHandler o s a = liftIO $ payload a
   status :: IORef State -> IO [Val]
   status s = do
     m <- readIORef s
