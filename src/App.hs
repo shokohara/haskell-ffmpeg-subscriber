@@ -110,22 +110,20 @@ server o s = statusHandler s :<|> payloadHandler o s where
   statusHandler :: MVar State -> Handler [Val]
   statusHandler s = lift $ status s
   payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
-  payloadHandler o s a = lift $ payload o s a
+  payloadHandler o s a = lift $ payload a
   status :: MVar State -> IO [Val]
   status s = do
     m <- readMVar s
     (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
   -- 処理不可能な引数で落ちる
-  payload :: Option -> MVar State -> PubSubRequest -> IO ()
-  payload o s a = do
+  -- gcpの通信で落ちる
+  payload :: PubSubRequest -> IO ()
+  payload a = do
     m <- takeMVar s
     print . length $ values m
     sequence (getExitCode <$> values m) >>= print
-    x1 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
-    _ <- createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a)))
-    x2 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand o a))
-    x3 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand2 o a))
-    putMVar s $ State $ values m ++ [x1, x2, x3]
+    x <- (\x -> (x, waitForProcess $ get4 x)) <$> (createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> (\y-> x) <$> run4 o a))
+    putMVar s $ State $ values m ++ [x]
     return ()
 
 --save :: Option -> PubSubRequest -> ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO ()
