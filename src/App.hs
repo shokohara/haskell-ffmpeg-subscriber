@@ -7,7 +7,10 @@
 
 module App where
 
+import System.Directory
+import Control.Monad.Trans.Resource (liftResourceT, runResourceT)
 import Api
+import qualified Data.Text as T
 import System.Exit
 import Control.Exception hiding (Handler)
 import Control.Monad
@@ -34,6 +37,11 @@ import System.Process
 import qualified Option as O
 import Control.Concurrent.MVar
 import Data.String
+import qualified Network.Google as Google
+import qualified Network.Google.Storage as Storage
+import Data.Conduit (($$+-))
+import qualified Data.Conduit.Binary as Conduit
+import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
 
 -- Mapになるだろう
 -- ffmpegが完了したら完了とみなされてしまう（GCPにアップロードする必要があるのに
@@ -81,6 +89,22 @@ ffmpegCommand o r =
    --in ("ffmpeg", [url, key])
   in ("touch", [[i|${dirPath}/${key}/${key}.m3u8|]])
 
+ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
+ffmpegCommand2 o r =
+  let dirPath = O.dir o
+      key = attributesKey . messageAttributes . psrMessage $ r
+      url = attributesUrl . messageAttributes . psrMessage $ r
+   --in ("ffmpeg", [url, key])
+  in ("touch", [[i|${dirPath}/${key}/${key}.ts|]])
+
+listFile :: Option -> PubSubRequest -> IO [FilePath]
+listFile o r =
+  let dirPath = O.dir o
+      key = attributesKey . messageAttributes . psrMessage $ r
+      url = attributesUrl . messageAttributes . psrMessage $ r
+   --in ("ffmpeg", [url, key])
+  in getDirectoryContents [i|${dirPath}/${key}|]
+
 server :: Option -> MVar State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
   statusHandler :: MVar State -> Handler [Val]
@@ -97,11 +121,34 @@ server o s = statusHandler s :<|> payloadHandler o s where
     m <- takeMVar s
     print . length $ values m
     sequence (getExitCode <$> values m) >>= print
-    x <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
-    _ <- createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4
-    y <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand o a))
-    putMVar s $ State $ values m ++ [x, y]
+    x1 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (proc "sh" ["-c", "sleep 3; date >> abc; echo finish"])
+    _ <- createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a)))
+    x2 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand o a))
+    x3 <- (\x -> (x, waitForProcess $ get4 x)) <$> createProcess (uncurry proc (ffmpegCommand2 o a))
+    putMVar s $ State $ values m ++ [x1, x2, x3]
     return ()
+
+--save :: Option -> PubSubRequest -> ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO ()
+--save o r p = do
+
+key :: Text
+key = T.pack "input"
+
+a :: [FilePath] -> IO [Google.Body]
+a fs = sequence $ Google.sourceBody <$> fs
+
+-- ディレクトリ名をつける
+run4 :: Option -> PubSubRequest -> IO ()
+run4 config keyy = do
+  lgr <- Google.newLogger Google.Debug stdout
+  env <- Google.newEnv <&> (Google.envLogger .~ lgr) . (Google.envScopes .~ Storage.storageReadWriteScope)
+  bodies <- listFile config keyy >>= a :: IO [Google.Body]
+  let bucket = O.bucket config
+  r <- runResourceT . Google.runGoogle env $ do
+    _ <- sequence $ Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ key) <$> bodies
+    stream <- Google.download (Storage.objectsGet (T.pack bucket) key)
+    liftResourceT (stream $$+- Conduit.sinkFile "output")
+  return ()
 
 mkApp :: Option -> MVar State -> IO Application
 mkApp o s = return $ serve api (server o s)

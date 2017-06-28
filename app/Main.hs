@@ -13,8 +13,11 @@ portOpt = option auto (long "port" <> help "Int")
 dirOpt :: Parser String
 dirOpt = strOption (long "dir" <> help "String")
 
+bucketOpt :: Parser String
+bucketOpt = strOption (long "bucket" <> help "String")
+
 sample :: Parser Option
-sample = Option <$> portOpt <*> dirOpt
+sample = Option <$> portOpt <*> dirOpt <*> bucketOpt
 
 opts :: ParserInfo Option
 opts = info (sample <**> helper) ( fullDesc

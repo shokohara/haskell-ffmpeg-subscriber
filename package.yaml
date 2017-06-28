@@ -50,4 +50,11 @@ dependencies:
   - mtl
   - stm-containers
   - classy-prelude
+  - directory
+  - resourcet
+  - lens
+  - gogol
+  - gogol-storage
+  - conduit
+  - conduit-extra
 
