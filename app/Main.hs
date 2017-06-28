@@ -5,7 +5,7 @@ import App
 import Options.Applicative
 import Data.Semigroup ((<>))
 import Option
-import Control.Concurrent.MVar
+import Data.IORef
 
 portOpt :: Parser Int
 portOpt = option auto (long "port" <> help "Int")
@@ -31,7 +31,7 @@ opts = info (sample <**> helper) ( fullDesc
 main :: IO ()
 main = do
   --state <- atomically $ (new :: STM (Map Integer Integer))
-  mvar <- newMVar (State [])
+  mvar <- newIORef (State [])
 --  state <- atomically $ newTVar (0, 0)
 --  let config = Configg { myState = state }
   execParser opts >>= App.run mvar

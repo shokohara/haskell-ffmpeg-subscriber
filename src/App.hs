@@ -35,7 +35,7 @@ import Servant.Client
 import System.IO
 import System.Process
 import qualified Option as O
-import Control.Concurrent.MVar
+import Data.IORef
 import Data.String
 import qualified Network.Google as Google
 import qualified Network.Google.Storage as Storage
@@ -48,7 +48,6 @@ import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
 newtype State = State {
   values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)]
                    }
-newtype StateVar = StateVar (MVar State)
 
 getAllIps :: ClientM (Maybe Val)
 getAllIps = client clientApi
@@ -105,25 +104,25 @@ listFile o r =
    --in ("ffmpeg", [url, key])
   in getDirectoryContents [i|${dirPath}/${key}|]
 
-server :: Option -> MVar State -> Server Api
+server :: Option -> IORef State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
-  statusHandler :: MVar State -> Handler [Val]
+  statusHandler :: IORef  State -> Handler [Val]
   statusHandler s = lift $ status s
-  payloadHandler :: Option -> MVar State -> PubSubRequest -> Handler ()
+  payloadHandler :: Option -> IORef State -> PubSubRequest -> Handler ()
   payloadHandler o s a = lift $ payload a
-  status :: MVar State -> IO [Val]
+  status :: IORef State -> IO [Val]
   status s = do
-    m <- readMVar s
+    m <- readIORef s
     (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
   -- 処理不可能な引数で落ちる
   -- gcpの通信で落ちる
   payload :: PubSubRequest -> IO ()
   payload a = do
-    m <- takeMVar s
+    m <- readIORef s
     print . length $ values m
     sequence (getExitCode <$> values m) >>= print
     x <- (\x -> (x, waitForProcess $ get4 x)) <$> (createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> (\y-> x) <$> run4 o a))
-    putMVar s $ State $ values m ++ [x]
+    writeIORef s $ State $ values m ++ [x]
     return ()
 
 --save :: Option -> PubSubRequest -> ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO ()
@@ -148,10 +147,10 @@ run4 config keyy = do
     liftResourceT (stream $$+- Conduit.sinkFile "output")
   return ()
 
-mkApp :: Option -> MVar State -> IO Application
+mkApp :: Option -> IORef State -> IO Application
 mkApp o s = return $ serve api (server o s)
 
-run :: MVar State -> Option -> IO ()
+run :: IORef State -> Option -> IO ()
 run s o = withStdoutLogger $ \apilogger -> do
   let settings =
         setPort (O.port o) $
