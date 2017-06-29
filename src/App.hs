@@ -7,42 +7,33 @@
 module App where
 
 import Debug.Trace
-import Control.Monad.Trans.Except
 import System.Directory
-import Control.Monad.Trans.Resource (liftResourceT, runResourceT)
+import Control.Monad.Trans.Resource (runResourceT)
 import Api
 import qualified Data.Text as T
 import System.Exit
 import Control.Exception hiding (Handler)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (lift)
-import Data.Aeson
-import Data.Aeson.Casing
 import Data.Either.Combinators
 import Data.String.Here
 import Data.Maybe
 import Data.Text (Text)
-import GHC.Generics
 import Network.HTTP.Client hiding (Proxy)
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Logger       (withStdoutLogger)
 import Option (Option)
 import Prelude hiding (lookup)
-import Data.Map (fromList)
 import Servant
 import Servant.Client
 import System.IO
 import System.Process
 import qualified Option as O
 import Data.IORef
-import Data.String
 import qualified Network.Google as Google
 import qualified Network.Google.Storage as Storage
-import Data.Conduit (($$+-))
-import qualified Data.Conduit.Binary as Conduit
-import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
+import Control.Lens ((&), (.~), (<&>), (?~))
 import System.Directory.Extra
 import System.FilePath.Posix
 
@@ -108,7 +99,7 @@ server o s = statusHandler s :<|> payloadHandler o s where
     return ()
 
 a :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
-a r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) <$> (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
+a r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
 
 -- 終わったら削除
 -- removeDirectoryRecursive
@@ -119,12 +110,12 @@ run4 :: Option -> PubSubRequest -> IO ()
 run4 config keyy = do
   lgr <- Google.newLogger Google.Debug stdout
   env <- Google.newEnv <&> (Google.envLogger .~ lgr) . (Google.envScopes .~ Storage.storageReadWriteScope)
-  _ <- (\x -> (traceShow x "hey")) <$> listFile config keyy
+  _ <- flip traceShow "hey" <$> listFile config keyy
   _ <- listFile config keyy >>= print
   bodies <- listFile config keyy >>= a keyy :: IO [(Text, Google.Body)]
   let bucket = O.bucket config
-  runResourceT . Google.runGoogle env $ do
-    sequence $ (\x-> Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ (fst x)) (snd x)) <$> bodies
+  runResourceT . Google.runGoogle env $
+    sequence $ (\x-> Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ fst x) (snd x)) <$> bodies
   return ()
 
 mkApp :: Option -> IORef State -> IO Application
