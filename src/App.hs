@@ -43,9 +43,9 @@ import qualified Network.Google.Storage as Storage
 import Data.Conduit (($$+-))
 import qualified Data.Conduit.Binary as Conduit
 import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
+import System.Directory.Extra
 
 -- Mapになるだろう
--- ffmpegが完了したら完了とみなされてしまう（GCPにアップロードする必要があるのに
 newtype State = State {
   values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)]
                    }
@@ -75,7 +75,8 @@ getExitCode = getProcessExitCode . get4 . fst
 
 mkdirCommand :: Option -> PubSubRequest -> (String, [String])
 mkdirCommand o r = ("mkdir", ["-p", [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]])
-
+--createDirectoryIfMissing
+--timeout
 -- ffmpeg -i movieurl -acodec copy -vcodec copy -f segment -segment_time 5 -segment_list playlist.m3u8 %d.ts
 ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.m3u8|]])
@@ -83,19 +84,20 @@ ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes
 
 ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.ts|]])
-
+--終わったら削除
+--removeDirectoryRecursive
 listFile :: Option -> PubSubRequest -> IO [FilePath]
 listFile o r =
   let dirPath = O.dir o
       key = attributesKey . messageAttributes . psrMessage $ r
       url = attributesUrl . messageAttributes . psrMessage $ r
    --in ("ffmpeg", [url, key])
-  in getDirectoryContents (traceStack (show $ dirPath ++ key) [i|${dirPath}/${key}|])
+  in listFiles [i|${dirPath}/${key}|]
 
 server :: Option -> IORef State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
   statusHandler :: IORef State -> Handler [Val]
-  statusHandler a = liftIO $ status a
+  statusHandler = liftIO . status
   payloadHandler :: Option -> IORef State -> PubSubRequest -> Handler ()
   payloadHandler o s a = liftIO $ payload a
   status :: IORef State -> IO [Val]
@@ -107,8 +109,8 @@ server o s = statusHandler s :<|> payloadHandler o s where
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
-    print . length $ values m
-    sequence (getExitCode <$> values m) >>= print
+ --   print . length $ values m
+    --sequence (getExitCode <$> values m) >>= print
     x <- (\x -> (x, waitForProcess $ get4 x)) <$> (createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
     writeIORef s $ State $ values m ++ [x]
     return ()
@@ -127,6 +129,8 @@ run4 :: Option -> PubSubRequest -> IO ()
 run4 config keyy = do
   lgr <- Google.newLogger Google.Debug stdout
   env <- Google.newEnv <&> (Google.envLogger .~ lgr) . (Google.envScopes .~ Storage.storageReadWriteScope)
+  _ <- (\x -> (traceShow x "hey")) <$> listFile config keyy
+  _ <- listFile config keyy >>= print
   bodies <- listFile config keyy >>= a :: IO [Google.Body]
   let bucket = O.bucket config
   r <- runResourceT . Google.runGoogle env $ do

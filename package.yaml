@@ -57,4 +57,5 @@ dependencies:
   - gogol-storage
   - conduit
   - conduit-extra
+  - extra
 
