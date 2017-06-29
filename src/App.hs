@@ -46,10 +46,7 @@ import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
 import System.Directory.Extra
 import System.FilePath.Posix
 
--- Mapになるだろう
-newtype State = State {
-  values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)]
-                   }
+newtype State = State { values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)] }
 
 getAllIps :: ClientM (Maybe Val)
 getAllIps = client clientApi
@@ -74,25 +71,21 @@ getStdOut = hGetContents . fromJust . get2
 getExitCode :: ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO (Maybe ExitCode)
 getExitCode = getProcessExitCode . get4 . fst
 
-mkdirCommand :: Option -> PubSubRequest -> (String, [String])
-mkdirCommand o r = ("mkdir", ["-p", [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]])
---createDirectoryIfMissing
---timeout
 -- ffmpeg -i movieurl -acodec copy -vcodec copy -f segment -segment_time 5 -segment_list playlist.m3u8 %d.ts
 ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.m3u8|]])
-   --in ("ffmpeg", [url, key])
 
 ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.ts|]])
---終わったら削除
---removeDirectoryRecursive
+
+mkdir :: Option -> PubSubRequest -> IO ()
+mkdir o r = createDirectoryIfMissing True [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+
 listFile :: Option -> PubSubRequest -> IO [FilePath]
 listFile o r =
   let dirPath = O.dir o
       key = attributesKey . messageAttributes . psrMessage $ r
       url = attributesUrl . messageAttributes . psrMessage $ r
-   --in ("ffmpeg", [url, key])
   in listFiles [i|${dirPath}/${key}|]
 
 server :: Option -> IORef State -> Server Api
@@ -105,28 +98,23 @@ server o s = statusHandler s :<|> payloadHandler o s where
   status s = do
     m <- readIORef s
     (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
-  -- 処理不可能な引数で落ちる
-  -- gcpの通信で落ちる
+  -- 処理不可能な引数で落ちる(keyがディレクトリ名として不正)
+  -- 通信で落ちる
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
- --   print . length $ values m
-    --sequence (getExitCode <$> values m) >>= print
-    x <- (\x -> (x, waitForProcess $ get4 x)) <$> (createProcess (uncurry proc (mkdirCommand o a)) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
+    x <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
     writeIORef s $ State $ values m ++ [x]
     return ()
-
---save :: Option -> PubSubRequest -> ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO ()
---save o r p = do
-
---key :: Text
---key = T.pack "input"
 
 a :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
 a r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) <$> (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
 
+-- 終わったら削除
+-- removeDirectoryRecursive
 -- リトライ
 -- ロギング
+-- タイムアウト
 run4 :: Option -> PubSubRequest -> IO ()
 run4 config keyy = do
   lgr <- Google.newLogger Google.Debug stdout
