@@ -93,13 +93,15 @@ server o s = statusHandler s :<|> payloadHandler o s where
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
-    x <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
-    writeIORef s $ State $ values m ++ [x]
+    y <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
+    writeIORef s $ State $ values m ++ [y]
     return ()
 
 b :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
 b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
 
+-- バケットとオブジェクトの命名ガイドライン
+-- https://cloud.google.com/storage/docs/naming?hl=ja
 -- 終わったら削除
 -- removeDirectoryRecursive
 -- リトライ

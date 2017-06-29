@@ -37,6 +37,9 @@ spec =
     withClient (mkApp (Option 3000 [i|${cwd}/tmp|] "shokoharatest") (unsafePerformIO $ newIORef (State []))) $
       it "allows to show items by id" $ \host ->
         try host (postPayload $ PubSubRequest (Message (Attributes "1" "thisiskey" "google.com") "" "" "") "") `shouldReturn` ()
+    withClient (mkApp (Option 3000 [i|${cwd}/tmp|] "shokoharatest") (unsafePerformIO $ newIORef (State []))) $
+      it "allows to show items by id" $ \host ->
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" "#[]*?" "google.com") "" "" "") "") `shouldReturn` ()
 
 withClient :: IO Application -> SpecWith Host -> SpecWith ()
 withClient x innerSpec =
