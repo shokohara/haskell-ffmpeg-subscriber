@@ -6,7 +6,6 @@
 
 module App where
 
-import Debug.Trace
 import System.Directory
 import Control.Monad.Trans.Resource (runResourceT)
 import Api
@@ -98,8 +97,8 @@ server o s = statusHandler s :<|> payloadHandler o s where
     writeIORef s $ State $ values m ++ [x]
     return ()
 
-a :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
-a r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
+b :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
+b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
 
 -- 終わったら削除
 -- removeDirectoryRecursive
@@ -110,9 +109,7 @@ run4 :: Option -> PubSubRequest -> IO ()
 run4 config keyy = do
   lgr <- Google.newLogger Google.Debug stdout
   env <- Google.newEnv <&> (Google.envLogger .~ lgr) . (Google.envScopes .~ Storage.storageReadWriteScope)
-  _ <- flip traceShow "hey" <$> listFile config keyy
-  _ <- listFile config keyy >>= print
-  bodies <- listFile config keyy >>= a keyy :: IO [(Text, Google.Body)]
+  bodies <- listFile config keyy >>= b keyy :: IO [(Text, Google.Body)]
   let bucket = O.bucket config
   runResourceT . Google.runGoogle env $
     sequence $ (\x-> Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ fst x) (snd x)) <$> bodies
