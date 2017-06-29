@@ -71,6 +71,9 @@ ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttribute
 mkdir :: Option -> PubSubRequest -> IO ()
 mkdir o r = createDirectoryIfMissing True [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
 
+rm :: Option -> PubSubRequest -> IO ()
+rm o r = removeDirectoryRecursive [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+
 listFile :: Option -> PubSubRequest -> IO [FilePath]
 listFile o r =
   let dirPath = O.dir o
@@ -93,7 +96,7 @@ server o s = statusHandler s :<|> payloadHandler o s where
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
-    y <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a))
+    y <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a) >>= (\x -> const x <$> rm o a))
     writeIORef s $ State $ values m ++ [y]
     return ()
 
@@ -102,8 +105,7 @@ b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (att
 
 -- バケットとオブジェクトの命名ガイドライン
 -- https://cloud.google.com/storage/docs/naming?hl=ja
--- 終わったら削除
--- removeDirectoryRecursive
+
 -- リトライ
 -- ロギング
 -- タイムアウト
