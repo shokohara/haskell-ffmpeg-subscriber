@@ -44,6 +44,7 @@ import Data.Conduit (($$+-))
 import qualified Data.Conduit.Binary as Conduit
 import Control.Lens ((&), (.~), (<&>), (?~), (^.), (^..), (^?))
 import System.Directory.Extra
+import System.FilePath.Posix
 
 -- Mapになるだろう
 newtype State = State {
@@ -118,25 +119,24 @@ server o s = statusHandler s :<|> payloadHandler o s where
 --save :: Option -> PubSubRequest -> ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO ()
 --save o r p = do
 
-key :: Text
-key = T.pack "input"
+--key :: Text
+--key = T.pack "input"
 
-a :: [FilePath] -> IO [Google.Body]
-a fs = sequence $ Google.sourceBody <$> fs
+a :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
+a r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) <$> (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
 
--- ディレクトリ名をつける
+-- リトライ
+-- ロギング
 run4 :: Option -> PubSubRequest -> IO ()
 run4 config keyy = do
   lgr <- Google.newLogger Google.Debug stdout
   env <- Google.newEnv <&> (Google.envLogger .~ lgr) . (Google.envScopes .~ Storage.storageReadWriteScope)
   _ <- (\x -> (traceShow x "hey")) <$> listFile config keyy
   _ <- listFile config keyy >>= print
-  bodies <- listFile config keyy >>= a :: IO [Google.Body]
+  bodies <- listFile config keyy >>= a keyy :: IO [(Text, Google.Body)]
   let bucket = O.bucket config
-  r <- runResourceT . Google.runGoogle env $ do
-    _ <- sequence $ Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ key) <$> bodies
-    stream <- Google.download (Storage.objectsGet (T.pack bucket) key)
-    liftResourceT (stream $$+- Conduit.sinkFile "output")
+  runResourceT . Google.runGoogle env $ do
+    sequence $ (\x-> Google.upload (Storage.objectsInsert (T.pack bucket) Storage.object' & Storage.oiName ?~ (fst x)) (snd x)) <$> bodies
   return ()
 
 mkApp :: Option -> IORef State -> IO Application

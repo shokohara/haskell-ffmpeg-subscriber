@@ -38,7 +38,6 @@ spec = do
       it "allows to show items by id" $ \host -> do
         --print cwd
         try host (postPayload $ PubSubRequest (Message (Attributes "1" "thisiskey" "google.com") "" "" "") "") `shouldReturn` ()
---        try host getItems `shouldReturn` [Item 0 "example item"]
 ----      it "allows to show items by id" $ \ host -> do
 ----        try host (getItem 0) `shouldReturn` Item 0 "example item"
 --        try host (getItem) `shouldReturn` Item 0 "example item"
