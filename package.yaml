@@ -59,4 +59,6 @@ dependencies:
   - conduit-extra
   - extra
   - filepath
+  - regex-posix
+  - regex-tdfa
 

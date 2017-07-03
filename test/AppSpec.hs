@@ -36,10 +36,18 @@ spec =
         try host getStatus `shouldReturn` [Val "localhost" 0]
     withClient (mkApp (Option 3000 [i|${cwd}/tmp|] "shokoharatest") (unsafePerformIO $ newIORef (State []))) $
       it "allows to show items by id" $ \host ->
-        try host (postPayload $ PubSubRequest (Message (Attributes "1" "thisiskey" "google.com") "" "" "") "") `shouldReturn` ()
-    withClient (mkApp (Option 3000 [i|${cwd}/tmp|] "shokoharatest") (unsafePerformIO $ newIORef (State []))) $
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "thisiskey") "google.com") "" "" "") "") `shouldReturn` ()
+    withClient (mkApp (Option 3000 [i|${cwd}/tmp|] "shokoharatest") (unsafePerformIO $ newIORef (State []))) $ do
       it "allows to show items by id" $ \host ->
-        try host (postPayload $ PubSubRequest (Message (Attributes "1" "#[]*?" "google.com") "" "" "") "") `shouldReturn` ()
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "#") "google.com") "" "" "") "") `shouldThrow` anyException
+      it "allows to show items by id" $ \host ->
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "[") "google.com") "" "" "") "") `shouldThrow` anyException
+      it "allows to show items by id" $ \host ->
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "]") "google.com") "" "" "") "") `shouldThrow` anyException
+      it "allows to show items by id" $ \host ->
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "*") "google.com") "" "" "") "") `shouldThrow` anyException
+      it "allows to show items by id" $ \host ->
+        try host (postPayload $ PubSubRequest (Message (Attributes "1" (StorageKey "?") "google.com") "" "" "") "") `shouldThrow` anyException
 
 withClient :: IO Application -> SpecWith Host -> SpecWith ()
 withClient x innerSpec =

@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeOperators #-}
@@ -6,6 +7,7 @@
 
 module App where
 
+import GHC.Generics
 import System.Directory
 import Control.Monad.Trans.Resource (runResourceT)
 import Api
@@ -35,6 +37,7 @@ import qualified Network.Google.Storage as Storage
 import Control.Lens ((&), (.~), (<&>), (?~))
 import System.Directory.Extra
 import System.FilePath.Posix
+import Data.Aeson
 
 newtype State = State { values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)] }
 
@@ -68,18 +71,17 @@ ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes
 ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.ts|]])
 
+dirName :: Option -> PubSubRequest -> String
+dirName o r = [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+
 mkdir :: Option -> PubSubRequest -> IO ()
-mkdir o r = createDirectoryIfMissing True [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+mkdir o r = createDirectoryIfMissing True $ dirName o r
 
 rm :: Option -> PubSubRequest -> IO ()
-rm o r = removeDirectoryRecursive [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+rm o r = removeDirectoryRecursive $ dirName o r
 
 listFile :: Option -> PubSubRequest -> IO [FilePath]
-listFile o r =
-  let dirPath = O.dir o
-      key = attributesKey . messageAttributes . psrMessage $ r
-      url = attributesUrl . messageAttributes . psrMessage $ r
-  in listFiles [i|${dirPath}/${key}|]
+listFile o r = listFiles $ dirName o r
 
 server :: Option -> IORef State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
@@ -91,8 +93,6 @@ server o s = statusHandler s :<|> payloadHandler o s where
   status s = do
     m <- readIORef s
     (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
-  -- 処理不可能な引数で落ちる(keyがディレクトリ名として不正)
-  -- 通信で落ちる
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
@@ -101,11 +101,18 @@ server o s = statusHandler s :<|> payloadHandler o s where
     return ()
 
 b :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
-b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack $ (attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x, Google.sourceBody x)) <$> fs
+b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack(T.unpack (unStorageKey . attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ (takeFileName x)), Google.sourceBody x)) <$> fs
+
+data Test = Test { testa :: T.Text, testb :: StorageKey } deriving (Eq, Show, Generic)
+
+instance FromJSON Test where
+  parseJSON = genericParseJSON defaultOptions
+
+aaa = decode "" :: Maybe Test
 
 -- バケットとオブジェクトの命名ガイドライン
 -- https://cloud.google.com/storage/docs/naming?hl=ja
-
+-- 処理不可能な引数で落ちる(keyがディレクトリ名として不正)
 -- リトライ
 -- ロギング
 -- タイムアウト
