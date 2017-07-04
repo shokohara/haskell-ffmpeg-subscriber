@@ -103,13 +103,6 @@ server o s = statusHandler s :<|> payloadHandler o s where
 b :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
 b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack(T.unpack (unStorageKey . attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ (takeFileName x)), Google.sourceBody x)) <$> fs
 
-data Test = Test { testa :: T.Text, testb :: StorageKey } deriving (Eq, Show, Generic)
-
-instance FromJSON Test where
-  parseJSON = genericParseJSON defaultOptions
-
-aaa = decode "" :: Maybe Test
-
 -- バケットとオブジェクトの命名ガイドライン
 -- https://cloud.google.com/storage/docs/naming?hl=ja
 -- 処理不可能な引数で落ちる(keyがディレクトリ名として不正)
