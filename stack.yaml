@@ -1,10 +1,6 @@
 resolver: nightly-2017-06-26
 packages:
 - location: .
-- location:
-    git: git@github.com:shokohara/servant-pubsub-webhook.git
-    commit: 967cff2cdaeb99a4c97328bbfa54753d8a9c814e
-  extra-dep: true
 extra-deps: []
 flags: {}
 extra-package-dbs: []

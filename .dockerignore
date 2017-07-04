@@ -1,0 +1,9 @@
+.git/
+.gitignore
+.stack-work/
+.travis.yml
+LICENSE
+README.md
+build-plan/
+*.cabal
+
