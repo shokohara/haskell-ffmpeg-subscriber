@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE TypeOperators #-}
@@ -20,6 +19,7 @@ import           Data.Maybe
 import           Data.String.Here
 import qualified Data.Text as T
 import           Data.Text (Text)
+import Debug.Trace
 import           GHC.Generics
 import qualified Network.Google as Google
 import qualified Network.Google.Storage as Storage
@@ -37,9 +37,10 @@ import           System.Directory.Extra
 import           System.Exit
 import           System.FilePath.Posix
 import           System.IO
+import System.IO.Unsafe
 import           System.Process
 
-newtype State = State { values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)] }
+newtype State = State { values :: [IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)] }
 
 getAllIps :: ClientM (Maybe Val)
 getAllIps = client clientApi
@@ -61,19 +62,16 @@ get2 (_, x, _, _) = x
 getStdOut :: (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle) -> IO String
 getStdOut = hGetContents . fromJust . get2
 
-getExitCode :: ((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode) -> IO (Maybe ExitCode)
-getExitCode = getProcessExitCode . get4 . fst
-
 -- ffmpeg -i movieurl -acodec copy -vcodec copy -f segment -segment_time 5 -segment_list playlist.m3u8 %d.ts
 ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
 --ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.m3u8|]])
 ffmpegCommand o r = ("ffmpeg", ["-i", [i|${attributesUrl . messageAttributes . psrMessage $ r}|], "-acodec", "copy", "-vcodec", "copy", "-f", "segment", "-segment_time", "5", "-segment_list", "playlist.m3u8", "%d.ts"])
 
 ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
-ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.ts|]])
+ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${unStorageKey . attributesKey . messageAttributes . psrMessage $ r}/${unStorageKey . attributesKey . messageAttributes . psrMessage $ r}.ts|]])
 
 dirName :: Option -> PubSubRequest -> String
-dirName o r = [i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}|]
+dirName o r = [i|${O.dir o}/${unStorageKey . attributesKey . messageAttributes . psrMessage $ r}|]
 
 mkdir :: Option -> PubSubRequest -> IO ()
 mkdir o r = createDirectoryIfMissing True $ dirName o r
@@ -93,16 +91,23 @@ server o s = statusHandler s :<|> payloadHandler o s where
   status :: IORef State -> IO [Val]
   status s = do
     m <- readIORef s
-    (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence (getExitCode <$> values m)
+--    _ <- traceIO $ show ((unsafePerformIO . (>>= getProcessExitCode) . get4) <$> values m)
+    return $ [Val "localhost" 1000]
+--    (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence ((>>= getProcessExitCode . get4) <$> values m)
   payload :: PubSubRequest -> IO ()
   payload a = do
     m <- readIORef s
-    y <- (\x -> (x, waitForProcess $ get4 x)) <$> (mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a) >>= (\x -> const x <$> rm o a))
-    writeIORef s $ State $ values m ++ [y]
+    _ <- writeIORef s $ State $ values m ++ [mkDirAndDownload o a]
     return ()
 
+funcForTest :: [Val] -> [(Maybe ExitCode)]
+funcForTest m = (((>>= getProcessExitCode) . get4) <$> values m)
+
+mkDirAndDownload :: Option -> PubSubRequest -> IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle)
+mkDirAndDownload o a = mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= waitForProcess . get4 >>= (\x -> createProcess (uncurry proc (ffmpegCommand2 o a))) >>= (\x -> const x <$> run4 o a) >>= (\x -> const x <$> rm o a)
+
 b :: PubSubRequest -> [FilePath] -> IO [(Text, Google.Body)]
-b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack(T.unpack (unStorageKey . attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ (takeFileName x)), Google.sourceBody x)) <$> fs
+b r fs = sequence $ (\x -> (\y -> (fst x, y)) <$> snd x) . (\x -> (T.pack(T.unpack (unStorageKey . attributesKey . messageAttributes . psrMessage $ r) ++ "/" ++ takeFileName x), Google.sourceBody x)) <$> fs
 
 -- バケットとオブジェクトの命名ガイドライン
 -- https://cloud.google.com/storage/docs/naming?hl=ja
