@@ -7,37 +7,37 @@
 
 module App where
 
-import GHC.Generics
-import System.Directory
-import Control.Monad.Trans.Resource (runResourceT)
-import Api
+import           Api
+import           Control.Exception hiding (Handler)
+import           Control.Lens ((&), (.~), (<&>), (?~))
+import           Control.Monad
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Resource (runResourceT)
+import           Data.Aeson
+import           Data.Either.Combinators
+import           Data.IORef
+import           Data.Maybe
+import           Data.String.Here
 import qualified Data.Text as T
-import System.Exit
-import Control.Exception hiding (Handler)
-import Control.Monad
-import Control.Monad.IO.Class (liftIO)
-import Data.Either.Combinators
-import Data.String.Here
-import Data.Maybe
-import Data.Text (Text)
-import Network.HTTP.Client hiding (Proxy)
-import Network.Wai
-import Network.Wai.Handler.Warp
-import Network.Wai.Logger       (withStdoutLogger)
-import Option (Option)
-import Prelude hiding (lookup)
-import Servant
-import Servant.Client
-import System.IO
-import System.Process
-import qualified Option as O
-import Data.IORef
+import           Data.Text (Text)
+import           GHC.Generics
 import qualified Network.Google as Google
 import qualified Network.Google.Storage as Storage
-import Control.Lens ((&), (.~), (<&>), (?~))
-import System.Directory.Extra
-import System.FilePath.Posix
-import Data.Aeson
+import           Network.HTTP.Client hiding (Proxy)
+import           Network.Wai
+import           Network.Wai.Handler.Warp
+import           Network.Wai.Logger       (withStdoutLogger)
+import           Option (Option)
+import qualified Option as O
+import           Prelude hiding (lookup)
+import           Servant
+import           Servant.Client
+import           System.Directory
+import           System.Directory.Extra
+import           System.Exit
+import           System.FilePath.Posix
+import           System.IO
+import           System.Process
 
 newtype State = State { values :: [((Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ExitCode)] }
 
@@ -66,7 +66,8 @@ getExitCode = getProcessExitCode . get4 . fst
 
 -- ffmpeg -i movieurl -acodec copy -vcodec copy -f segment -segment_time 5 -segment_list playlist.m3u8 %d.ts
 ffmpegCommand :: Option -> PubSubRequest -> (String, [String])
-ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.m3u8|]])
+--ffmpegCommand o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.m3u8|]])
+ffmpegCommand o r = ("ffmpeg", ["-i", [i|${attributesUrl . messageAttributes . psrMessage $ r}|], "-acodec", "copy", "-vcodec", "copy", "-f", "segment", "-segment_time", "5", "-segment_list", "playlist.m3u8", "%d.ts"])
 
 ffmpegCommand2 :: Option -> PubSubRequest -> (String, [String])
 ffmpegCommand2 o r = ("touch", [[i|${O.dir o}/${attributesKey . messageAttributes . psrMessage $ r}/${attributesKey . messageAttributes . psrMessage $ r}.ts|]])
