@@ -10,15 +10,16 @@ module Api where
 import Data.Aeson
 import Data.Aeson.Casing
 import Data.Maybe
+import Data.String.Here
 import qualified Data.Text as T
-import Text.Regex.TDFA
 import Data.Text (Text, unpack, pack)
 import GHC.Generics
 import Prelude hiding (lookup)
-import Data.String.Here
 import Servant
+import Text.Regex.TDFA
 
 newtype StorageKey = StorageKey { unStorageKey :: Text } deriving (Eq, Show)
+-- TODO String to Text
 data Attributes = Attributes { attributesVersion :: String, attributesKey :: StorageKey, attributesUrl :: String } deriving (Show, Eq, Generic)
 data Message = Message { messageAttributes :: Attributes, messageData :: Text, messageMessageId :: Text, messagePublishTime :: Text } deriving (Show, Eq, Generic)
 data PubSubRequest = PubSubRequest { psrMessage :: Message, psrSubscription :: Text } deriving (Show, Eq, Generic)
