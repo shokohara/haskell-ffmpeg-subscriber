@@ -29,6 +29,7 @@ tests:
       - http-types
 dependencies:
   - base
+  - async
   - servant
   - servant-server
   - servant-client
