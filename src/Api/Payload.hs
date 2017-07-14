@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module App where
+module Api.Payload where
 
 import           Api
 import Control.Concurrent
@@ -128,7 +128,7 @@ testFunction s = do
 --  a <- withAsync (putStrLn "start to download" >>= \_ -> putStrLn "downloading" >>= \_ -> threadDelay 1000 >>= \_ -> putStrLn "finish downloading")
  -- >>= \pa -> withAsync (putStrLn "start to upload" >>= \_ -> threadDelay 1000 >>= \_ -> putStrLn "uploading" >>= \_ -> putStrLn "finish uploading")
   --writeIORef s $ [async (putStrLn "start to download" >>= \_ -> putStrLn "downloading" >>= \_ -> threadDelay 1000 >>= \_ -> putStrLn "finish downloading")]
-  writeIORef s $ m ++ [async $ mkDirDownloadUpload o psr]
+  writeIORef s $ [async $ mkDirDownloadUpload o psr]
 --      return (pa, pb)
       --return ((), ())
 
