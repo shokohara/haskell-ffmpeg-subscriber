@@ -29,7 +29,7 @@ tests:
       - http-types
 dependencies:
   - base
-  - monad-par
+  - async
   - servant
   - servant-server
   - servant-client
