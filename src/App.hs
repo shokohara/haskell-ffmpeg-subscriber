@@ -8,6 +8,8 @@
 module App where
 
 import           Api
+import Api.Payload
+import           Api.Status
 import Control.Concurrent
 import Control.Concurrent.Async
 import           Control.Exception hiding (Handler)
@@ -34,15 +36,16 @@ import qualified Option as O
 import           Prelude hiding (lookup)
 import           Servant
 import           Servant.Client
+import State
 import           System.Directory
 import           System.Directory.Extra
---import           System.Exit
+import           System.Exit
 import           System.FilePath.Posix
 import           System.IO
 import           System.IO.Unsafe
 import           System.Process hiding (cwd)
 
-newtype State = State { values :: [IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle, IO ())] }
+--newtype State = State { values :: [IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle, IO ())] }
 --newtype State = State { values :: [(IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ())] }
 
 getAllIps :: ClientM (Maybe Val)
@@ -83,21 +86,21 @@ listFile o r = listFiles $ dirName o r
 
 server :: Option -> IORef State -> Server Api
 server o s = statusHandler s :<|> payloadHandler o s where
-  statusHandler :: IORef State -> Handler [Val]
-  statusHandler = liftIO . status
+--  statusHandler :: IORef State -> Handler [Val]
+--  statusHandler = liftIO . status
   payloadHandler :: Option -> IORef State -> PubSubRequest -> Handler ()
   payloadHandler o s a = liftIO $ payload a
-  status :: IORef State -> IO [Val]
-  status s = do
-    m <- readIORef s
+--  status :: IORef State -> IO [Val]
+--  status s = do
+--    m <- readIORef s
 --    _ <- traceIO $ show ((unsafePerformIO . (>>= getProcessExitCode) . get4) <$> values m)
 --_ <- return $ (>>= traceIO . show) <$> ((>>= getProcessExitCode . get4) <$> values m)
 --    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . fst . unsafePerformIO . head . values $ m
 --    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . unsafePerformIO . head . values $ m
-    _ <- traceIO "thisistest"
+--    _ <- traceIO "thisistest"
 --    _ <- sequence ((>>= getProcessExitCode . get4) <$> values m)
 --    _ <- (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence ((>>= getProcessExitCode . get4) <$> values m)
-    return [Val "localhost" 0]
+ --   return [Val "localhost" 0]
   payload :: PubSubRequest -> IO ()
   payload a = do
 --    _ <- testFunction
