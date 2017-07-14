@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
-import App
+import Api.Payload
 import Control.Concurrent
 import Data.IORef
 import Data.Semigroup ((<>))
