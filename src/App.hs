@@ -10,6 +10,7 @@ import           Control.Exception hiding (Handler)
 import           Control.Lens ((&), (.~), (<&>), (?~))
 import           Control.Monad
 import           Control.Monad.IO.Class (liftIO)
+import Control.Monad.Par
 import           Control.Monad.Trans.Resource (runResourceT)
 import           Data.Either.Combinators
 import           Data.IORef
@@ -88,7 +89,7 @@ server o s = statusHandler s :<|> payloadHandler o s where
     m <- readIORef s
 --    _ <- traceIO $ show ((unsafePerformIO . (>>= getProcessExitCode) . get4) <$> values m)
 --_ <- return $ (>>= traceIO . show) <$> ((>>= getProcessExitCode . get4) <$> values m)
-    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . fst . unsafePerformIO . head . values $ m
+--    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . fst . unsafePerformIO . head . values $ m
 --    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . unsafePerformIO . head . values $ m
     _ <- traceIO "thisistest"
 --    _ <- sequence ((>>= getProcessExitCode . get4) <$> values m)
@@ -96,8 +97,18 @@ server o s = statusHandler s :<|> payloadHandler o s where
     return [Val "localhost" 0]
   payload :: PubSubRequest -> IO ()
   payload a = do
-    m <- readIORef s _ <- writeIORef s $ State $ values m ++ [mkDirDownloadUpload o a] _ <- traceIO "write"
-mkDirDownloadUpload o a = mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= (\x -> (x, uploadMovies o a)) >>= (\x -> const x <$> rm o a)
+--    m <- readIORef s
+--    _ <- writeIORef s $ State $ values m ++ [mkDirAndDownload o a]
+    return ()
+
+testFunction :: ((), ())
+testFunction = runPar $ do
+  pa <- spawnP (())
+  pb <- spawnP (())
+  a <- get pa
+  b <- get pb
+  return (a, b)
+--mkDirDownloadUpload o a = mkdir o a >>= (\x -> createProcess (uncurry proc (ffmpegCommand o a))) >>= (\x -> (x, uploadMovies o a)) >>= (\x -> const x <$> rm o a)
 --mkDirAndDownload :: Option -> PubSubRequest -> (IO (Maybe Handle, Maybe Handle, Maybe Handle, ProcessHandle), IO ())
 --mkDirAndDownload o a = undefined
 --mkDirAndDownload o a = ((\xx -> (fst xx, snd xx >>= uploadMovies o a >>= (\x -> const x <$> rm o a))) $
