@@ -51,7 +51,7 @@ instance FromJSON Message where
 instance FromJSON PubSubRequest where
   parseJSON = genericParseJSON $ aesonPrefix snakeCase
 
-data Val = Val { name :: String, value :: Int } deriving (Show, Generic, FromJSON, ToJSON, Eq)
+data Val = Val { value :: Int } deriving (Show, Generic, FromJSON, ToJSON, Eq)
 
 type ClientApi = "api" :> Get '[JSON] (Maybe Val)
 

@@ -10,7 +10,6 @@ module App where
 import           Api
 import Api.Payload
 import           Api.Status
-import Control.Concurrent
 import Control.Concurrent.Async
 import           Control.Exception hiding (Handler)
 import           Control.Lens ((&), (.~), (<&>), (?~))

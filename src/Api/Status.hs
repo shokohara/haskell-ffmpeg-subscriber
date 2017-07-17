@@ -43,17 +43,22 @@ import           System.IO.Unsafe
 import           System.Process hiding (cwd)
 
 statusHandler :: IORef State -> Handler [Val]
-statusHandler = liftIO . status
-
-status :: IORef State -> IO [Val]
-status s = do
-  m <- readIORef s
---    _ <- traceIO $ show ((unsafePerformIO . (>>= getProcessExitCode) . get4) <$> values m)
---_ <- return $ (>>= traceIO . show) <$> ((>>= getProcessExitCode . get4) <$> values m)
---    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . fst . unsafePerformIO . head . values $ m
---    _ <- traceIO . show . unsafePerformIO . getProcessExitCode . get4 . unsafePerformIO . head . values $ m
-  _ <- traceIO "thisistest"
---    _ <- sequence ((>>= getProcessExitCode . get4) <$> values m)
---    _ <- (\n -> [Val "localhost" n]) . length . filter isNothing <$> sequence ((>>= getProcessExitCode . get4) <$> values m)
-  return [Val "localhost" 0]
+statusHandler = liftIO . status where
+  status :: IORef State -> IO [Val]
+  status s = do
+    m <- readIORef s :: IO State
+    b <- f3 (values m) :: IO [Bool]
+    return [Val (length . filter (== True) $ b)]
+  f :: IO (Async a) -> IO Bool
+  f i = isNothing <$> (i >>= poll)
+  f1 :: Async a -> IO Bool
+  f1 i = isNothing <$> poll i
+  f2 :: [Async a] -> [IO Bool]
+  f2 = (\x -> f1 <$> x)
+  f3 :: [Async a] -> IO [Bool]
+  f3 x = sequence $ f2 x
+  f4 :: [Async a] -> IO [Maybe (Either SomeException a)]
+  f4 x = sequence $ f5 x
+  f5 :: [Async a] -> [IO (Maybe (Either SomeException a))]
+  f5 = (\x -> poll <$> x)
 
